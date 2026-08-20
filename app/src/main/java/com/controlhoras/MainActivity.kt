@@ -2,14 +2,13 @@ package com.controlhoras
 
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.provider.MediaStore
-import android.widget.Button
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.view.Gravity
+import android.widget.*
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
 class MainActivity : Activity() {
 
@@ -21,21 +20,12 @@ class MainActivity : Activity() {
 
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(40, 40, 40, 40)
+            setPadding(30, 30, 30, 30)
         }
 
         val titulo = TextView(this).apply {
             text = "Control Horas"
             textSize = 28f
-            gravity = Gravity.CENTER
-        }
-
-        val instrucciones = TextView(this).apply {
-            text = "Toma una foto de la tarjeta de horas para comenzar."
-            textSize = 18f
-            gravity = Gravity.CENTER
-            setPadding(0, 30, 0, 30)
         }
 
         val botonFoto = Button(this).apply {
@@ -46,7 +36,7 @@ class MainActivity : Activity() {
         }
 
         val botonGaleria = Button(this).apply {
-            text = "🖼️ Seleccionar foto"
+            text = "🖼️ Buscar foto"
             setOnClickListener {
                 abrirGaleria()
             }
@@ -57,13 +47,12 @@ class MainActivity : Activity() {
         }
 
         resultado = TextView(this).apply {
-            text = ""
+            text = "Selecciona o toma una foto de la tarjeta."
             textSize = 18f
-            setPadding(0, 30, 0, 0)
+            setPadding(0, 20, 0, 20)
         }
 
         layout.addView(titulo)
-        layout.addView(instrucciones)
         layout.addView(botonFoto)
         layout.addView(botonGaleria)
         layout.addView(imageView)
@@ -83,19 +72,58 @@ class MainActivity : Activity() {
         startActivityForResult(intent, 200)
     }
 
+    private fun reconocerTexto(bitmap: Bitmap) {
+        resultado.text = "🔍 Leyendo la tarjeta..."
+
+        val image = InputImage.fromBitmap(bitmap, 0)
+        val recognizer = TextRecognition.getClient(
+            TextRecognizerOptions.DEFAULT_OPTIONS
+        )
+
+        recognizer.process(image)
+            .addOnSuccessListener { visionText ->
+                val texto = visionText.text
+
+                if (texto.isBlank()) {
+                    resultado.text = "No pude reconocer texto en la foto."
+                } else {
+                    resultado.text =
+                        "Texto reconocido:\n\n$texto"
+                }
+            }
+            .addOnFailureListener { error ->
+                resultado.text =
+                    "No se pudo leer la tarjeta: ${error.message}"
+            }
+    }
+
     @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?
+    ) {
         super.onActivityResult(requestCode, resultCode, data)
 
-        if (resultCode == RESULT_OK && data != null) {
-            if (requestCode == 200) {
-                val uri: Uri? = data.data
-                imageView.setImageURI(uri)
-                resultado.text = "Foto seleccionada. Próximamente leeremos las horas."
-            } else if (requestCode == 100) {
-                val foto = data.extras?.get("data")
-                imageView.setImageBitmap(foto as android.graphics.Bitmap)
-                resultado.text = "Foto tomada. Próximamente leeremos las horas."
+        if (resultCode != RESULT_OK || data == null) return
+
+        if (requestCode == 200) {
+            val uri = data.data ?: return
+
+            val bitmap = MediaStore.Images.Media.getBitmap(
+                contentResolver,
+                uri
+            )
+
+            imageView.setImageBitmap(bitmap)
+            reconocerTexto(bitmap)
+
+        } else if (requestCode == 100) {
+            val bitmap = data.extras?.get("data") as? Bitmap
+
+            if (bitmap != null) {
+                imageView.setImageBitmap(bitmap)
+                reconocerTexto(bitmap)
             }
         }
     }
