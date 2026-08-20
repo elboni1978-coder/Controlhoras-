@@ -2,7 +2,7 @@ package com.controlhoras
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.widget.*
@@ -67,34 +67,42 @@ class MainActivity : Activity() {
     }
 
     private fun abrirGaleria() {
-        val intent = Intent(Intent.ACTION_PICK)
-        intent.type = "image/*"
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            type = "image/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
+        }
+
         startActivityForResult(intent, 200)
     }
 
-    private fun reconocerTexto(bitmap: Bitmap) {
+    private fun reconocerTexto(uri: Uri) {
         resultado.text = "🔍 Leyendo la tarjeta..."
 
-        val image = InputImage.fromBitmap(bitmap, 0)
-        val recognizer = TextRecognition.getClient(
-            TextRecognizerOptions.DEFAULT_OPTIONS
-        )
+        try {
+            val image = InputImage.fromFilePath(this, uri)
 
-        recognizer.process(image)
-            .addOnSuccessListener { visionText ->
-                val texto = visionText.text
+            val recognizer = TextRecognition.getClient(
+                TextRecognizerOptions.DEFAULT_OPTIONS
+            )
 
-                if (texto.isBlank()) {
-                    resultado.text = "No pude reconocer texto en la foto."
-                } else {
-                    resultado.text =
-                        "Texto reconocido:\n\n$texto"
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    if (visionText.text.isBlank()) {
+                        resultado.text = "No pude reconocer texto en la foto."
+                    } else {
+                        resultado.text =
+                            "Texto reconocido:\n\n${visionText.text}"
+                    }
                 }
-            }
-            .addOnFailureListener { error ->
-                resultado.text =
-                    "No se pudo leer la tarjeta: ${error.message}"
-            }
+                .addOnFailureListener { error ->
+                    resultado.text =
+                        "No se pudo leer la tarjeta.\n${error.message}"
+                }
+
+        } catch (e: Exception) {
+            resultado.text =
+                "No se pudo abrir la imagen.\n${e.message}"
+        }
     }
 
     @Deprecated("Deprecated in Java")
@@ -110,21 +118,8 @@ class MainActivity : Activity() {
         if (requestCode == 200) {
             val uri = data.data ?: return
 
-            val bitmap = MediaStore.Images.Media.getBitmap(
-                contentResolver,
-                uri
-            )
-
-            imageView.setImageBitmap(bitmap)
-            reconocerTexto(bitmap)
-
-        } else if (requestCode == 100) {
-            val bitmap = data.extras?.get("data") as? Bitmap
-
-            if (bitmap != null) {
-                imageView.setImageBitmap(bitmap)
-                reconocerTexto(bitmap)
-            }
+            imageView.setImageURI(uri)
+            reconocerTexto(uri)
         }
     }
 }
