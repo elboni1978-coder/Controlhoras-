@@ -90,8 +90,20 @@ class MainActivity : Activity() {
                     if (visionText.text.isBlank()) {
                         resultado.text = "No pude reconocer texto en la foto."
                     } else {
-                        resultado.text =
-                            "Texto reconocido:\n\n${visionText.text}"
+                        val patronHora = Regex(
+    """\b(?:[01]?\d|2[0-3])[:.][0-5]\d(?:\s?[AaPp][Mm])?\b"""
+)
+
+val horas = patronHora
+    .findAll(visionText.text)
+    .map { it.value }
+    .toList()
+
+resultado.text = if (horas.isEmpty()) {
+    "No encontré horas. El OCR leyó:\n\n${visionText.text}"
+} else {
+    "Horas encontradas:\n\n${horas.joinToString("\n")}"
+}
                     }
                 }
                 .addOnFailureListener { error ->
