@@ -5,7 +5,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
-import android.widget.*
+import android.widget.Button
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -87,23 +90,20 @@ class MainActivity : Activity() {
 
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
-                    if (visionText.text.isBlank()) {
-                        resultado.text = "No pude reconocer texto en la foto."
+
+                    val patronHora = Regex(
+                        """\b(?:[01]?\d|2[0-3])[:.][0-5]\d(?:\s?[AaPp][Mm])?\b"""
+                    )
+
+                    val horas = patronHora
+                        .findAll(visionText.text)
+                        .map { it.value }
+                        .toList()
+
+                    resultado.text = if (horas.isEmpty()) {
+                        "No encontré horas.\n\nTexto reconocido:\n${visionText.text}"
                     } else {
-                        val patronHora = Regex(
-    """\b(?:[01]?\d|2[0-3])[:.][0-5]\d(?:\s?[AaPp][Mm])?\b"""
-)
-
-val horas = patronHora
-    .findAll(visionText.text)
-    .map { it.value }
-    .toList()
-
-resultado.text = if (horas.isEmpty()) {
-    "No encontré horas. El OCR leyó:\n\n${visionText.text}"
-} else {
-    "Horas encontradas:\n\n${horas.joinToString("\n")}"
-}
+                        "Horas encontradas:\n\n${horas.joinToString("\n")}"
                     }
                 }
                 .addOnFailureListener { error ->
