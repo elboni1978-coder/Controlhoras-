@@ -2,6 +2,8 @@ package com.controlhoras
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -50,7 +52,7 @@ class MainActivity : Activity() {
         }
 
         resultado = TextView(this).apply {
-            text = "Selecciona o toma una foto de la tarjeta."
+            text = "Selecciona una foto de la tarjeta."
             textSize = 18f
             setPadding(0, 20, 0, 20)
         }
@@ -78,43 +80,76 @@ class MainActivity : Activity() {
         startActivityForResult(intent, 200)
     }
 
-    private fun reconocerTexto(uri: Uri) {
-        resultado.text = "🔍 Leyendo la tarjeta..."
-
+    private fun procesarFoto(uri: Uri) {
         try {
-            val image = InputImage.fromFilePath(this, uri)
-
-            val recognizer = TextRecognition.getClient(
-                TextRecognizerOptions.DEFAULT_OPTIONS
+            val original = MediaStore.Images.Media.getBitmap(
+                contentResolver,
+                uri
             )
 
-            recognizer.process(image)
-                .addOnSuccessListener { visionText ->
+            imageView.setImageBitmap(original)
+            resultado.text = "🔍 Preparando la tarjeta..."
 
-                    val patronHora = Regex(
-                        """\b(?:[01]?\d|2[0-3])[:.][0-5]\d(?:\s?[AaPp][Mm])?\b"""
-                    )
+            // Giramos la imagen 90 grados para ayudar
+            // al reconocimiento de las horas verticales.
+            val matrix = Matrix()
+            matrix.postRotate(90f)
 
-                    val horas = patronHora
-                        .findAll(visionText.text)
-                        .map { it.value }
-                        .toList()
+            val girada = Bitmap.createBitmap(
+                original,
+                0,
+                0,
+                original.width,
+                original.height,
+                matrix,
+                true
+            )
 
-                    resultado.text = if (horas.isEmpty()) {
-                        "No encontré horas.\n\nTexto reconocido:\n${visionText.text}"
-                    } else {
-                        "Horas encontradas:\n\n${horas.joinToString("\n")}"
-                    }
-                }
-                .addOnFailureListener { error ->
-                    resultado.text =
-                        "No se pudo leer la tarjeta.\n${error.message}"
-                }
+            reconocerTexto(girada)
 
         } catch (e: Exception) {
             resultado.text =
-                "No se pudo abrir la imagen.\n${e.message}"
+                "No se pudo procesar la foto.\n${e.message}"
         }
+    }
+
+    private fun reconocerTexto(bitmap: Bitmap) {
+
+        resultado.text = "🔍 Leyendo las horas..."
+
+        val image = InputImage.fromBitmap(bitmap, 0)
+
+        val recognizer = TextRecognition.getClient(
+            TextRecognizerOptions.DEFAULT_OPTIONS
+        )
+
+        recognizer.process(image)
+            .addOnSuccessListener { visionText ->
+
+                val patronHora = Regex(
+                    """\b(?:[01]?\d|2[0-3])[:.][0-5]\d\b"""
+                )
+
+                val horas = patronHora
+                    .findAll(visionText.text)
+                    .map { it.value }
+                    .toList()
+
+                if (horas.isEmpty()) {
+                    resultado.text =
+                        "No encontré horas todavía.\n\n" +
+                        "OCR después de girar la tarjeta:\n\n" +
+                        visionText.text
+                } else {
+                    resultado.text =
+                        "Horas detectadas:\n\n" +
+                        horas.joinToString("\n")
+                }
+            }
+            .addOnFailureListener { error ->
+                resultado.text =
+                    "Error al leer la tarjeta:\n${error.message}"
+            }
     }
 
     @Deprecated("Deprecated in Java")
@@ -123,15 +158,33 @@ class MainActivity : Activity() {
         resultCode: Int,
         data: Intent?
     ) {
-        super.onActivityResult(requestCode, resultCode, data)
+        super.onActivityResult(
+            requestCode,
+            resultCode,
+            data
+        )
 
-        if (resultCode != RESULT_OK || data == null) return
+        if (resultCode != RESULT_OK || data == null) {
+            return
+        }
 
         if (requestCode == 200) {
+
             val uri = data.data ?: return
 
-            imageView.setImageURI(uri)
-            reconocerTexto(uri)
+            procesarFoto(uri)
+
+        } else if (requestCode == 100) {
+
+            val bitmap =
+                data.extras?.get("data") as? Bitmap
+
+            if (bitmap != null) {
+
+                imageView.setImageBitmap(bitmap)
+
+                reconocerTexto(bitmap)
+            }
         }
     }
 }
